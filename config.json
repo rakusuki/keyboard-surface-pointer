@@ -1,0 +1,8 @@
+{
+  "layout": "jis",
+  "mode_scan": 58,
+  "gain": 32.0,
+  "precision_gain": 4.0,
+  "stroke_timeout": 0.45,
+  "max_step": 3.0
+}
