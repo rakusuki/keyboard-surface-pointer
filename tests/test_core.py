@@ -121,10 +121,11 @@ class ContinuousMotionTests(unittest.TestCase):
             e.handle(code, False, False, i * 0.05 + 0.01)
         self.assertEqual(moves, [("move", 32, 0)] * 8)
 
-    def test_adjacent_reverse_is_still_possible(self):
+    def test_adjacent_reverse_reanchors_then_moves_left(self):
         e = self.make()
         self.stroke(e, [0x24, 0x25, 0x26])
-        self.assertEqual(e.handle(0x25, False, True, 0.15).actions, (("move", -32, 0),))
+        self.assertEqual(e.handle(0x25, False, True, 0.15).actions, ())
+        self.assertEqual(e.handle(0x24, False, True, 0.20).actions, (("move", -32, 0),))
 
     def test_hold_and_release(self):
         e = self.make()
@@ -180,6 +181,76 @@ class ContinuousMotionTests(unittest.TestCase):
             moves.extend(e.handle(code, False, True, i * 0.05).actions)
             e.handle(code, False, False, i * 0.05 + 0.01)
         self.assertEqual(moves, [("move", -32, 0)] * 6)
+
+
+class TwoKeyAndShortcutTests(unittest.TestCase):
+    def test_two_key_strokes_both_directions(self):
+        for codes, dx in (([0x24, 0x25], 32), ([0x25, 0x24], -32)):
+            with self.subTest(codes=codes):
+                e = Engine(Settings())
+                e.handle(0x3A, False, True, 0)
+                actions = []
+                for i, code in enumerate(codes * 5):
+                    actions.extend(e.handle(code, False, True, i * 0.05).actions)
+                    e.handle(code, False, False, i * 0.05 + 0.01)
+                self.assertEqual(actions, [("move", dx, 0)] * 5)
+
+    def test_two_key_hold_continues(self):
+        e = Engine(Settings())
+        e.handle(0x3A, False, True, 0)
+        for i, code in enumerate([0x24, 0x25, 0x24]):
+            e.handle(code, False, True, i * 0.05)
+            e.handle(code, False, False, i * 0.05 + 0.01)
+        e.handle(0x25, False, True, 0.15)
+        self.assertEqual(e.tick(0.46), (("move", 16, 0),))
+        e.handle(0x25, False, False, 0.47)
+        self.assertEqual(e.tick(0.5), ())
+
+    def assert_shortcut_passes(self, e, codes):
+        for i, (scan, extended) in enumerate(codes):
+            result = e.handle(scan, extended, True, 1 + i * 0.01)
+            self.assertFalse(result.suppress)
+            self.assertEqual(result.actions, ())
+        for i, (scan, extended) in enumerate(reversed(codes)):
+            self.assertFalse(e.handle(scan, extended, False, 2 + i * 0.01).suppress)
+
+    def test_shortcuts_before_and_after_pointing(self):
+        shortcuts = [
+            [(0x38, False), (0x0F, False)],  # Alt+Tab
+            [(0x38, True), (0x0F, False)],   # right Alt+Tab
+            [(0x1D, False), (0x2E, False)], # Ctrl+C
+            [(0x2A, False), (0x23, False)], # Shift+H
+            [(0x5B, True), (0x20, False)],  # Win+D
+        ]
+        for after_mode in (False, True):
+            for codes in shortcuts:
+                with self.subTest(after_mode=after_mode, codes=codes):
+                    e = Engine(Settings())
+                    if after_mode:
+                        e.handle(0x3A, False, True, 0)
+                        e.handle(0x24, False, True, 0.05)
+                        e.handle(0x25, False, True, 0.1)
+                        e.tick(0.4)
+                        e.handle(0x3A, False, False, 0.5)
+                        e.handle(0x24, False, False, 0.6)
+                        e.handle(0x25, False, False, 0.6)
+                    self.assert_shortcut_passes(e, codes)
+                    self.assertEqual(e.tick(3), ())
+
+    def test_alt_pressed_after_mode_release_even_with_late_movement_keyup(self):
+        e = Engine(Settings())
+        e.handle(0x3A, False, True, 0)
+        e.handle(0x24, False, True, 0.05)
+        e.handle(0x3A, False, False, 0.1)
+        self.assert_shortcut_passes(e, [(0x38, False), (0x0F, False)])
+        self.assertTrue(e.handle(0x24, False, False, 3).suppress)
+
+    def test_forwarded_alt_release_is_not_swallowed(self):
+        e = Engine(Settings())
+        self.assertFalse(e.handle(0x38, False, True, 0).suppress)
+        e.handle(0x3A, False, True, 0.05)
+        e.handle(0x3A, False, False, 0.1)
+        self.assertFalse(e.handle(0x38, False, False, 0.15).suppress)
 
 
 class ConfigurationTests(unittest.TestCase):

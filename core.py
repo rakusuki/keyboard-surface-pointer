@@ -33,7 +33,7 @@ class Settings:
     precision_gain: float = 4.0
     stroke_timeout: float = 0.45
     max_step: float = 3.0
-    restart_distance: float = 2.0
+    restart_distance: float = 1.0
     hold_delay: float = 0.25
     hold_speed: float = 320.0
     precision_hold_speed: float = 40.0
@@ -174,7 +174,7 @@ class Engine:
         if distance > self.settings.max_step:
             self.direction = None
             return Result(True)
-        # A long return against the preceding direction begins a new stroke.
+        # A return against the preceding direction begins a new stroke.
         # For J-K-L-J, L-J resets the anchor instead of undoing rightward motion.
         if (self.direction is not None and distance >= self.settings.restart_distance
                 and dx * self.direction[0] + dy * self.direction[1] < 0):

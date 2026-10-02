@@ -4,7 +4,7 @@
 
 ## 日本語
 
-既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows向け試作版 **v0.2.0** です。追加機器・外部Pythonライブラリは不要です。
+既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows向け試作版 **v0.2.1** です。追加機器・外部Pythonライブラリは不要です。
 
 通常のキーボードには接触位置センサーがないため、**触れるだけでは動きません。キーが入力される深さまで押す必要があります。** トラックパッドと同じ精度・操作感を保証するものではなく、押しながらなぞる操作の実用性を検証する段階です。
 
@@ -44,7 +44,7 @@ py -3 pointer.py
 | 最初の文字・数字・記号キー | 基準点を設定。ポインターは動きません |
 | 次のキーを押す | 前のキーとの物理座標差で相対移動 |
 | `F → G → H` | 右へ移動 |
-| `J → K → L` を繰り返す | LからJへ戻る際は移動せず、右移動を繰り返す |
+| `J → K` または `J → K → L` を繰り返す | 逆方向への戻りは移動せず、右移動を繰り返す |
 | 最後の移動キーを押し続ける | 0.25秒後から直前の方向へ連続移動。離すと停止 |
 | `F → R` | 上へ移動。行の横ずれも反映 |
 | Shiftを併用 | 精密移動 |
@@ -55,17 +55,19 @@ py -3 pointer.py
 | Caps Lockを離す | モード終了、押下中のマウスボタンも解放 |
 | モード中にEsc | モードをキャンセル。再開にはモードキーを離して押し直す |
 
+Caps Lock（または設定したモードキー）を離した後、新たに押すキーは通常のキーボード入力として通します。`Alt+Tab`、`Ctrl+C`、`Win+D`などを使えます。モード中に抑制したキーの遅れた解放だけは対応する押下と対にして抑制し、キー状態が残らないようにします。
+
 **すべてのキーを離してからモードを開始してください。** 他のキーが先に押されている場合、その回のモード起動を無効にします。先に押されたCtrlなどがマウス操作に影響するのを防ぎます。
 
 最初は指一本で `F → G → H` と順番に押す方法を試してください。複数の指は識別できません。指の戻し移動が逆向きの入力にならないよう、モードキーをいったん離し、指を戻してから再開します。Shiftはモード開始後に押してください。
 
-繰り返し操作では各キーを離しながら `J → K → L → J → K → L` と押します。LからJへの戻りは、直前の方向に逆らう2キー間隔の移動なので、次のストロークの基準点として扱います。この判定は実際の指を識別するものではなく、意図的な長い逆方向移動も同じ扱いになります。隣接キーへ戻る `L → K → J` なら左へ動かせます。
+2キーなら `J → K → J → K` で右へ、`K → J → K → J` で左へ動き続けます。繰り返し操作では各キーを離しながら `J → K → L → J → K → L` と押します。LからJへの戻りは、直前の方向に逆らう1キー間隔の移動なので、次のストロークの基準点として扱います。この判定は実際の指を識別するものではなく、意図的な長い逆方向移動も同じ扱いになります。方向を切り替える場合、最初の逆向き入力は基準点の更新のみで、次の同方向入力から動きます。確実に切り替えるにはモードキーを離して押し直し、`K → J` と入力してください。
 
 連続移動には少なくとも2つの異なる移動キーが必要です。`J → K → L` のLを保持すると、直前のKからLへの方向に進み続けます。Lを離す、モードキーを離す、またはEscで停止します。Shiftで連続速度も下げられます。クリックやスクロールを挟むと方向をリセットするため、もう一度キーの移動順を入力してください。
 
 ## 感度・配列の設定
 
-`config.json` が標準設定です。個人用設定は次のように作れます。
+`config.json` が標準設定です。既存の個人設定に `"restart_distance": 2.0` がある場合、2キー繰り返しには `1.0` に変更してください。個人用設定は次のように作れます。
 
 ```powershell
 Copy-Item config.json config.local.json
@@ -81,7 +83,7 @@ py -3 pointer.py --config config.local.json
 | `precision_gain` | `4.0` | Shift中の移動指示量 |
 | `stroke_timeout` | `0.45` | この秒数以上の間隔が空くと次のキーは基準点になります |
 | `max_step` | `3.0` | 1イベントでこれを超えるキー間距離は移動せず基準点を更新 |
-| `restart_distance` | `2.0` | 直前の方向と逆向きにこの距離以上戻ったら、新しいストロークとして扱う |
+| `restart_distance` | `1.0` | 直前の方向と逆向きにこの距離以上戻ったら、新しいストロークとして扱う |
 | `hold_delay` | `0.25` | 最後の移動キーを保持してから連続移動が始まるまでの秒数 |
 | `hold_speed` | `320.0` | 連続移動の相対移動指示量／秒 |
 | `precision_hold_speed` | `40.0` | Shift中の連続移動速度 |
@@ -124,6 +126,8 @@ GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、Windo
 7. 日本語IMEオン、別のアプリ、複数画面でも同じ確認を行うこと。
 8. `J → K → L` を3回繰り返し、戻りで左へ動かないこと。
 9. 最後のLを保持して連続移動、L解放で停止すること。ShiftとEscも確認すること。
+10. `J → K` の繰り返しで右移動、モードを押し直して `K → J` の繰り返しで左移動すること。
+11. モードキーを離してからAlt+Tabでアプリ切り替えできること。
 
 ## 制約・トラブル
 
@@ -154,7 +158,7 @@ GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、Windo
 
 ### Overview
 
-**v0.2.0** is a Windows prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware or third-party Python libraries are required.
+**v0.2.1** is a Windows prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware or third-party Python libraries are required.
 
 **Touch alone cannot be detected: each key must be pressed far enough to register.** This prototype evaluates the practicality of moving across keycaps while pressing them; it does not promise trackpad-level precision or comfort.
 
@@ -194,7 +198,7 @@ To stop, release the mode key, focus the console, and press `Ctrl+C`.
 | Press the first mapped key | Set an anchor without moving the pointer |
 | Press the next mapped key | Move relative to the physical position of the previous key |
 | `F → G → H` | Move right |
-| Repeat `J → K → L` | The return from L to J re-anchors without moving backward |
+| Repeat `J → K` or `J → K → L` | The return against the preceding direction re-anchors without moving backward |
 | Hold the final movement key | Continue in the preceding direction after 0.25 seconds; release to stop |
 | `F → R` | Move upward, including the physical row offset |
 | Hold Shift in pointing mode | Use precision movement |
@@ -205,17 +209,19 @@ To stop, release the mode key, focus the console, and press `Ctrl+C`.
 | Release Caps Lock | Exit pointing mode and release mouse buttons held by the application |
 | Press Esc in pointing mode | Cancel the mode; release and press the mode key again to reactivate |
 
+After releasing Caps Lock (or the configured mode key), newly pressed keys pass through as normal keyboard input, including `Alt+Tab`, `Ctrl+C`, and `Win+D`. Late releases of keys consumed during pointing remain paired with their consumed presses.
+
 **Release all other keys before starting pointing mode.** If another key is already held, that activation is disabled to prevent previously held modifiers such as Ctrl from affecting mouse actions.
 
 Start with one finger and press `F → G → H` in sequence. Individual fingers cannot be distinguished. To reposition without moving backward, release the mode key, move your finger back, and activate the mode again. Press Shift after activating the mode.
 
-Release each movement key between presses when repeating `J → K → L → J → K → L`. A return of at least two key pitches against the previous direction is treated as repositioning. This is a heuristic, not finger identification; an intentional long reversal is also treated as a new stroke. Use adjacent reversals such as `L → K → J` to move left.
+Two-key strokes work as `J → K → J → K` for rightward movement or `K → J → K → J` for leftward movement. Release each movement key between presses when repeating `J → K → L → J → K → L`. A return of at least one key pitch against the previous direction is treated as repositioning. This is a heuristic, not finger identification; an intentional long reversal is also treated as a new stroke. The first reversed step re-anchors; a second step in that direction moves the pointer. To switch direction explicitly, release and reactivate the mode, then press `K → J` to move left.
 
 Continuous motion requires at least two different movement keys. Hold L after `J → K → L` to continue in the direction from K to L. Release L, release the mode key, or press Esc to stop. Shift also reduces continuous speed. Clicking or scrolling resets the direction, so enter another key sequence afterward.
 
 ### Configuration
 
-The default settings are in `config.json`. Create a personal configuration:
+The default settings are in `config.json`. If an existing personal configuration contains `"restart_distance": 2.0`, change it to `1.0` to enable two-key repetition. Create a personal configuration:
 
 ```powershell
 Copy-Item config.json config.local.json
@@ -231,7 +237,7 @@ py -3 pointer.py --config config.local.json
 | `precision_gain` | `4.0` | Movement units while Shift is held |
 | `stroke_timeout` | `0.45` | A gap longer than this many seconds makes the next key a new anchor |
 | `max_step` | `3.0` | A key-to-key distance exceeding this threshold re-anchors instead of moving |
-| `restart_distance` | `2.0` | A return against the previous direction at or above this distance starts a new stroke |
+| `restart_distance` | `1.0` | A return against the previous direction at or above this distance starts a new stroke |
 | `hold_delay` | `0.25` | Seconds before holding the final movement key starts continuous motion |
 | `hold_speed` | `320.0` | Continuous relative movement units per second |
 | `precision_hold_speed` | `40.0` | Continuous movement speed while Shift is held |
@@ -274,6 +280,8 @@ Manual checklist:
 7. Repeat with Japanese IME enabled, other applications, and multiple monitors.
 8. Repeat `J → K → L` three times and verify that returns do not move left.
 9. Hold the final L to continue moving, release to stop, and test Shift and Esc.
+10. Repeat `J → K` to move right, reactivate the mode, and repeat `K → J` to move left.
+11. Release the mode key and verify normal Alt+Tab application switching.
 
 ### Limitations and troubleshooting
 
