@@ -1,5 +1,9 @@
 # keyboard-surface-pointer
 
+[日本語](#日本語) | [English](#english)
+
+## 日本語
+
 既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows向け試作版 **v0.1.0** です。追加機器・外部Pythonライブラリは不要です。
 
 通常のキーボードには接触位置センサーがないため、**触れるだけでは動きません。キーが入力される深さまで押す必要があります。** トラックパッドと同じ精度・操作感を保証するものではなく、押しながらなぞる操作の実用性を検証する段階です。
@@ -127,4 +131,146 @@ GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、Windo
 
 ## ライセンス
 
-MIT License。詳細は [LICENSE](LICENSE) を参照してください。
+本プロジェクトは [MIT License](LICENSE) のOSSです。
+
+**Copyright (c) 2026 rakusuki。著作権は保持しており、パブリックドメインへの放棄ではありません。**
+
+利用・改変・再配布・商用利用を認めます。ソフトウェアのすべての複製または重要な部分には、著作権表示と許諾表示を含める必要があります。無保証で提供します。正式な条件は [LICENSE](LICENSE) の全文を参照してください。
+
+
+## English
+
+### Overview
+
+**v0.1.0** is a Windows prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware or third-party Python libraries are required.
+
+**Touch alone cannot be detected: each key must be pressed far enough to register.** This prototype evaluates the practicality of moving across keycaps while pressing them; it does not promise trackpad-level precision or comfort.
+
+### Requirements
+
+- Windows 10 / 11 desktop with native Python 3.10 or later.
+- Standard JIS or US number, letter, and symbol key areas.
+- Actual pointer control is not supported on WSL, macOS, or Linux. The engine tests can run on Linux.
+- Fn keys, numeric keypads, split keyboards, and custom physical layouts are not mapped. Whole-keyboard coverage is future work.
+
+### Getting started
+
+Run in PowerShell. Install Python from [python.org](https://www.python.org/downloads/windows/) if needed.
+
+```powershell
+git clone https://github.com/rakusuki/keyboard-surface-pointer.git
+cd keyboard-surface-pointer
+py -3 pointer.py --check-backend
+py -3 pointer.py --dry-run
+```
+
+`--check-backend` validates Windows API bindings and structure size without capturing input. `--dry-run` prints generated mouse actions without sending mouse events. **Keys are still suppressed while pointing mode is active in dry-run.**
+
+Then start normal operation:
+
+```powershell
+py -3 pointer.py
+```
+
+To stop, release the mode key, focus the console, and press `Ctrl+C`.
+
+### Controls
+
+| Action | Behavior |
+|---|---|
+| Hold Caps Lock | Activate pointing mode. Its normal Caps Lock function is suppressed while the application runs |
+| Press the first mapped key | Set an anchor without moving the pointer |
+| Press the next mapped key | Move relative to the physical position of the previous key |
+| `F → G → H` | Move right |
+| `F → R` | Move upward, including the physical row offset |
+| Hold Shift in pointing mode | Use precision movement |
+| Press and release Space | Left click |
+| Hold Space while moving | Drag |
+| Press and release Enter | Right click |
+| Press Up / Down arrow | Scroll up / down; auto-repeat is ignored |
+| Release Caps Lock | Exit pointing mode and release mouse buttons held by the application |
+| Press Esc in pointing mode | Cancel the mode; release and press the mode key again to reactivate |
+
+**Release all other keys before starting pointing mode.** If another key is already held, that activation is disabled to prevent previously held modifiers such as Ctrl from affecting mouse actions.
+
+Start with one finger and press `F → G → H` in sequence. Individual fingers cannot be distinguished. To reposition without moving backward, release the mode key, move your finger back, and activate the mode again. Press Shift after activating the mode.
+
+### Configuration
+
+The default settings are in `config.json`. Create a personal configuration:
+
+```powershell
+Copy-Item config.json config.local.json
+notepad config.local.json
+py -3 pointer.py --config config.local.json
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `layout` | `"jis"` | Physical layout: `"jis"` or `"us"` |
+| `mode_scan` | `58` | Caps Lock; use `66` for F8. Other values are rejected |
+| `gain` | `32.0` | Relative movement units per standard key pitch |
+| `precision_gain` | `4.0` | Movement units while Shift is held |
+| `stroke_timeout` | `0.45` | A gap longer than this many seconds makes the next key a new anchor |
+| `max_step` | `3.0` | A key-to-key distance exceeding this threshold re-anchors instead of moving |
+
+Windows mouse speed and acceleration settings also affect the resulting pointer movement. Distant key presses may come from another finger or repositioning, so large jumps are suppressed. Adjust sensitivity and timeout together to suit your pressing speed.
+
+The engine uses physical scan codes rather than typed characters or IME state. JIS `ろ` and `¥` positions are included. Verify position mappings on unusual keyboards.
+
+### Architecture and input handling
+
+- `core.py`: OS-independent physical coordinates, relative movement, held-key ownership, mode state, and mouse-button state.
+- `pointer.py`: Windows backend using `WH_KEYBOARD_LL` and `SendInput`.
+- `config.json`: Layout and sensitivity settings.
+- `tests/test_core.py`: Regression tests for mode switching, movement, precision, and clicks.
+
+Key-down and key-up events are paired so that releases of consumed keys remain suppressed after the mode ends. Auto-repeat does not count as finger movement. On shutdown, the application attempts to release mouse buttons it pressed.
+
+No key-history file logging, external transmission, or network communication is implemented. Dry-run prints generated mouse actions only.
+
+The hook callback avoids console/file I/O and keeps processing short. Windows can silently remove a hook if its callback times out. If control stops working, stop and restart the process. Complete recovery from hangs or forced termination is not guaranteed.
+
+### Verification
+
+```powershell
+py -3 -m unittest discover -s tests -v
+py -3 -m compileall -q core.py pointer.py
+py -3 pointer.py --check-backend
+```
+
+GitHub Actions is configured for Windows and Ubuntu with Python 3.10 and 3.13. Windows jobs also check API loading and the INPUT structure size. **Automated tests do not verify physical gestures, IME interactions, application switching, or pointer comfort.** Initial engine verification was performed on Linux; interactive operation on a physical Windows machine has not been verified.
+
+Manual checklist:
+
+1. Confirm normal typing in Notepad.
+2. Hold Caps Lock and press `F → G → H`; verify rightward movement without typed characters.
+3. Try `F → R`, Shift precision, and slow presses that trigger re-anchoring.
+4. Click with Space and drag while holding Space.
+5. Release Caps Lock or press Esc during a drag; verify mouse-button release.
+6. Return to typing and confirm Shift/Ctrl do not remain logically held.
+7. Repeat with Japanese IME enabled, other applications, and multiple monitors.
+
+### Limitations and troubleshooting
+
+- UIPI restricts input injection from a normal-privilege application into an elevated application. Test with normal-privilege applications first.
+- UAC prompts, lock screens, and sign-in screens are outside the supported scope.
+- Supported simultaneous key combinations depend on the keyboard. Start with one finger.
+- Avoid multiple instances and other keyboard remapping tools during testing.
+- Avoid console selection that pauses the process; it may cause the hook to time out.
+- Touch detection, sub-key position tracking, finger identification, and continuous high-resolution tracking are unavailable.
+- Interpolation and inertia are not implemented. The prototype prioritizes testing controllable movement without unintended continued motion.
+
+### Prior work and technical references
+
+- [KeySlide: Using Directional Gestures on Keyboard for Cursor Positioning](https://arihantparsoya.github.io/portfolio/files/papers/keyslide.pdf) (2019): Physical-keyboard gestures primarily for text-cursor positioning. This project is an independent prototype for the OS mouse pointer and does not reuse the paper's code.
+- [LowLevelKeyboardProc](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
+- [SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
+
+### License and copyright
+
+This project is open-source software under the [MIT License](LICENSE).
+
+**Copyright (c) 2026 rakusuki. Copyright is retained; the code is not dedicated to the public domain.**
+
+The license permits use, modification, redistribution, and commercial use, provided its copyright notice and permission notice are included in all copies or substantial portions of the software. The software is provided without warranty. See [LICENSE](LICENSE) for the full terms.
