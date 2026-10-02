@@ -4,7 +4,7 @@
 
 ## 日本語
 
-既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows向け試作版 **v0.2.1** です。追加機器・外部Pythonライブラリは不要です。
+既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows・Ubuntu・macOS向け試作版 **v0.3.0** です。追加機器は不要です。Windows版はPython標準ライブラリのみ、Ubuntu/macOS版はOS別の依存ライブラリを使用します。
 
 通常のキーボードには接触位置センサーがないため、**触れるだけでは動きません。キーが入力される深さまで押す必要があります。** トラックパッドと同じ精度・操作感を保証するものではなく、押しながらなぞる操作の実用性を検証する段階です。
 
@@ -12,10 +12,10 @@
 
 - Windows 10 / 11のデスクトップ、ネイティブ版Python 3.10以上。
 - 標準的なJIS / USキーボードの数字・文字・記号キー領域。
-- WSL、macOS、Linuxでの実マウス操作には未対応。計算部分のテストはLinuxでも実行できます。
+- Ubuntu版はevdev/uinput、macOS版はQuartzで操作します。下記のOS別手順を参照してください。WSLは対象外です。
 - Fnキー、テンキー、分割・特殊配列の座標対応は対象外です。キーボード全体への拡張は今後の課題です。
 
-## 起動
+## 起動（Windows）
 
 PowerShellで次を実行します。Pythonが未導入の場合は https://www.python.org/downloads/windows/ から導入してください。
 
@@ -95,7 +95,10 @@ py -3 pointer.py --config config.local.json
 ## 実装と入力の扱い
 
 - `core.py`: 配列座標、相対移動、押下状態、モードとボタン管理。OSから独立。
-- `pointer.py`: `WH_KEYBOARD_LL` と `SendInput` を使うWindows常駐処理。
+- `pointer.py`: OS別バックエンドへの起動処理。
+- `windows_backend.py`: `WH_KEYBOARD_LL` と `SendInput` を使うWindows処理。
+- `ubuntu_backend.py` / `macos_backend.py`: Ubuntu / macOSの入力と出力。
+- `keycodes.py`: 各OSの物理キーコードを共通形式に変換。
 - `config.json`: 配列・感度の設定。
 - `tests/test_core.py`: 入力切り替え、方向、精密操作、クリックなどの回帰テスト。
 
@@ -113,7 +116,7 @@ py -3 -m compileall -q core.py pointer.py
 py -3 pointer.py --check-backend
 ```
 
-GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、WindowsではAPIのロードとINPUT構造体のサイズも確認します。**自動テストは実際の指操作、IME、アプリ切り替え、マウスの操作感を検証しません。** 初回実装時はLinuxで計算テストを実施しており、Windows実機での操作は未確認です。
+GitHub ActionsではWindows / Ubuntu / macOS、Python 3.10 / 3.13でテストし、WindowsではAPIのロードとINPUT構造体のサイズも確認します。**自動テストは実際の指操作、IME、アプリ切り替え、マウスの操作感を検証しません。** 初回実装時はLinuxで計算テストを実施しており、Windows実機での操作は未確認です。
 
 実機で、次の順に確認してください。
 
@@ -158,7 +161,7 @@ GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、Windo
 
 ### Overview
 
-**v0.2.1** is a Windows prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware or third-party Python libraries are required.
+**v0.3.0** is a Windows, Ubuntu, and macOS prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware is required. Windows uses the Python standard library; Ubuntu and macOS require platform-specific dependencies.
 
 **Touch alone cannot be detected: each key must be pressed far enough to register.** This prototype evaluates the practicality of moving across keycaps while pressing them; it does not promise trackpad-level precision or comfort.
 
@@ -166,10 +169,10 @@ GitHub ActionsではWindows / Ubuntu、Python 3.10 / 3.13でテストし、Windo
 
 - Windows 10 / 11 desktop with native Python 3.10 or later.
 - Standard JIS or US number, letter, and symbol key areas.
-- Actual pointer control is not supported on WSL, macOS, or Linux. The engine tests can run on Linux.
+- Ubuntu uses evdev/uinput; macOS uses Quartz. See the platform-specific instructions below. WSL is unsupported.
 - Fn keys, numeric keypads, split keyboards, and custom physical layouts are not mapped. Whole-keyboard coverage is future work.
 
-### Getting started
+### Getting started (Windows)
 
 Run in PowerShell. Install Python from [python.org](https://www.python.org/downloads/windows/) if needed.
 
@@ -249,7 +252,10 @@ The engine uses physical scan codes rather than typed characters or IME state. J
 ### Architecture and input handling
 
 - `core.py`: OS-independent physical coordinates, relative movement, held-key ownership, mode state, and mouse-button state.
-- `pointer.py`: Windows backend using `WH_KEYBOARD_LL` and `SendInput`.
+- `pointer.py`: Cross-platform entry point.
+- `windows_backend.py`: Windows backend using `WH_KEYBOARD_LL` and `SendInput`.
+- `ubuntu_backend.py` / `macos_backend.py`: Ubuntu / macOS input and output.
+- `keycodes.py`: Physical-key normalization for the shared engine.
 - `config.json`: Layout and sensitivity settings.
 - `tests/test_core.py`: Regression tests for mode switching, movement, precision, and clicks.
 
@@ -267,7 +273,7 @@ py -3 -m compileall -q core.py pointer.py
 py -3 pointer.py --check-backend
 ```
 
-GitHub Actions is configured for Windows and Ubuntu with Python 3.10 and 3.13. Windows jobs also check API loading and the INPUT structure size. **Automated tests do not verify physical gestures, IME interactions, application switching, or pointer comfort.** Initial engine verification was performed on Linux; interactive operation on a physical Windows machine has not been verified.
+GitHub Actions is configured for Windows, Ubuntu, and macOS with Python 3.10 and 3.13. Windows jobs also check API loading and the INPUT structure size. **Automated tests do not verify physical gestures, IME interactions, application switching, or pointer comfort.** Initial engine verification was performed on Linux; interactive operation on a physical Windows machine has not been verified.
 
 Manual checklist:
 
@@ -306,3 +312,82 @@ This project is open-source software under the [MIT License](LICENSE).
 **Copyright (c) 2026 rakusuki. Copyright is retained; the code is not dedicated to the public domain.**
 
 The license permits use, modification, redistribution, and commercial use, provided its copyright notice and permission notice are included in all copies or substantial portions of the software. The software is provided without warranty. See [LICENSE](LICENSE) for the full terms.
+
+
+## Ubuntu版の導入 / Ubuntu setup
+
+UbuntuデスクトップでPython 3.10以上を使用します。X11/WaylandのアプリAPIではなく、evdev/uinputのデバイス層で入出力する構成です。実デスクトップでの操作は未検証です。選択した1台のキーボードのみを対象とします。
+
+Use Python 3.10+ on an Ubuntu desktop. Input/output uses evdev/uinput rather than X11/Wayland application APIs. Interactive desktop operation has not been verified. Only one explicitly selected keyboard is handled.
+
+```bash
+git pull --ff-only
+sudo apt update
+sudo apt install python3-venv python3-dev build-essential linux-libc-dev
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-ubuntu.txt
+.venv/bin/python pointer.py --check-backend
+sudo modprobe uinput
+sudo .venv/bin/python pointer.py --list-devices
+```
+
+一覧の実キーボードを選び、下記の `/dev/input/eventN` をそのパスに置き換えてください。イベント番号は再起動や抜き差しで変わる場合があります。
+
+Select the physical keyboard from the list and replace `/dev/input/eventN` below with its path. Event numbers may change after reboot or reconnection.
+
+```bash
+sudo .venv/bin/python pointer.py --device /dev/input/eventN --dry-run
+# Stop with Ctrl+C, then start normally:
+sudo .venv/bin/python pointer.py --device /dev/input/eventN
+```
+
+- Caps Lockを保持して操作。解放後は通常入力を仮想デバイス経由で転送し、Alt+Tabなどを使えます。
+- Hold Caps Lock to point. Outside the mode, keyboard events are forwarded through a virtual input device, including Alt+Tab.
+- 選択キーボードを排他的に取得します。入力デバイスと `/dev/uinput` へのアクセスが必要なため、試作段階では `sudo` で実行します。sudoでpipのインストールは行いません。
+- The selected keyboard is grabbed exclusively. The prototype uses `sudo` for input-device and `/dev/uinput` access; dependency installation runs without sudo.
+- 停止はモード解除後に端末でCtrl+C、または選択キーボードで **左Ctrl+Alt+Esc**。端末を閉じる前に停止してください。キーボード切断・入力欠落時は終了して再起動します。正常終了時は仮想キーを解放し、grabを解除します。
+- Stop with Ctrl+C in the terminal after leaving pointing mode, or **left Ctrl+Alt+Esc** on the selected keyboard. Stop before closing the terminal. Restart after disconnection or dropped events. Cleanup releases virtual keys and the exclusive grab.
+- 仮想入力デバイスのCaps Lock LED同期、複数キーボードの一体処理は未実装です。別のキーボードで押す修飾キーは追跡しません。他キーボードの修飾キーも離して試してください。
+- Caps Lock LED synchronization and combined handling of multiple keyboards are not implemented. Modifiers held on other keyboards are not tracked; release them during testing.
+
+## macOS版の導入 / macOS setup
+
+macOSではCaps Lockのトグル状態を物理的な押下・解放として扱わず、標準のモードキーを **F8** にします。`config.macos.json` はmacOSで自動選択されます。カスタム設定を渡す場合も `mode_scan` を `66` にしてください。
+
+On macOS, Caps Lock's toggle state is not used as physical down/up input. The default mode key is **F8**, with `config.macos.json` selected automatically. Custom configurations must also set `mode_scan` to `66`.
+
+```bash
+git pull --ff-only
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
+.venv/bin/python pointer.py --check-backend
+.venv/bin/python pointer.py --dry-run
+```
+
+「システム設定 → プライバシーとセキュリティ」の **入力監視** と **アクセシビリティ** で、起動に使うTerminal/iTerm/VSCodeなど、macOSが対象として表示するアプリへ権限を付与してください。許可後はそのアプリを再起動し、再実行します。sudoは使いません。
+
+Grant **Input Monitoring** and **Accessibility** in System Settings → Privacy & Security to the terminal/IDE or Python application identified by macOS. Restart that application after granting access, then rerun. Do not use sudo.
+
+```bash
+.venv/bin/python pointer.py
+```
+
+- **F8を保持して `J → K → J → K`** で右へ移動。最後のKを保持すると連続移動。F8を離すと停止して通常入力へ戻ります。
+- **Hold F8 and press `J → K → J → K`** to move right. Hold the final K for continuous motion. Release F8 to stop and return to typing.
+- F8がメディアキーとして働く場合は **Fn+F8**、またはmacOSの「F1、F2などのキーを標準のファンクションキーとして使用」を有効にしてください。モード中のFnは通常機能へ通します。
+- If F8 acts as a media key, use **Fn+F8** or enable standard function keys in macOS settings. Fn remains passed through.
+- F8解放後はCommand+Tabなどを通常入力として通します。Shiftで精密操作、Spaceで左クリック/ドラッグ、Returnで右クリック、上下矢印でスクロールします。
+- Command+Tab passes through outside pointing mode. Shift gives precision control, Space clicks/drags, Return right-clicks, and Up/Down scrolls.
+- Secure Input、ログイン画面、権限がないアプリでは入力取得・操作できない場合があります。入力タップが無効化された場合は終了して再起動します。
+- Secure Input, sign-in screens, and missing permissions can prevent capture or control. Restart if macOS disables the event tap.
+
+## OS別の検証範囲 / Platform verification scope
+
+共通エンジンとOS別キー変換は自動テスト対象です。CIは各OSの依存ライブラリの読み込みも確認する構成です。Ubuntuのgrab/uinput経路やmacOSの権限付きイベントタップの実操作はCIでは検証しません。Ubuntu/macOSは新規バックエンドの試作で、実機動作を確認済みとはしていません。
+
+Automated tests cover the shared engine and key mappings. CI is configured to check platform dependency imports too. It does not exercise an Ubuntu keyboard grab/uinput path or an authorized interactive macOS event tap. These are new prototype backends; physical desktop operation is not claimed as verified.
+
+参考 / References:
+- [python-evdev tutorial](https://python-evdev.readthedocs.io/en/stable/tutorial.html)
+- [PyObjC Quartz notes](https://pyobjc.readthedocs.io/en/latest/apinotes/Quartz.html)
+- [Apple Quartz Event Services](https://developer.apple.com/documentation/coregraphics/quartz-event-services)
