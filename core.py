@@ -33,6 +33,10 @@ class Settings:
     precision_gain: float = 4.0
     stroke_timeout: float = 0.45
     max_step: float = 3.0
+    restart_distance: float = 2.0
+    hold_delay: float = 0.25
+    hold_speed: float = 320.0
+    precision_hold_speed: float = 40.0
 
     def __post_init__(self) -> None:
         key_positions(self.layout)
@@ -41,12 +45,15 @@ class Settings:
         # Keep controls and movement keys distinct; F8 is an alternative.
         if self.mode_scan not in {0x3A, 0x42}:
             raise ValueError("mode_scan must be 58 (Caps Lock) or 66 (F8)")
-        for name in ("gain", "precision_gain", "stroke_timeout", "max_step"):
+        for name in ("gain", "precision_gain", "stroke_timeout", "max_step",
+                     "restart_distance", "hold_delay", "hold_speed", "precision_hold_speed"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise ValueError(f"{name} must be a number")
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
+        if self.precision_hold_speed > self.hold_speed:
+            raise ValueError("precision_hold_speed must not exceed hold_speed")
         if self.precision_gain > self.gain:
             raise ValueError("precision_gain must not exceed gain")
 
@@ -68,12 +75,42 @@ class Engine:
         self.anchor: tuple[float, float] | None = None
         self.last_time = 0.0
         self.buttons: set[str] = set()
+        self.direction: tuple[float, float] | None = None
+        self.motion_key: tuple[int, bool] | None = None
+        self.tick_time = 0.0
+        self.continuing = False
+        self.remainder = (0.0, 0.0)
+
+    def clear_motion(self) -> None:
+        self.anchor = None
+        self.direction = None
+        self.motion_key = None
+        self.continuing = False
+        self.remainder = (0.0, 0.0)
+
+    def tick(self, now: float) -> tuple[tuple, ...]:
+        """Continue the last direction only while its final key remains held."""
+        if not self.active or self.direction is None or self.motion_key not in self.held:
+            return ()
+        start = self.last_time + self.settings.hold_delay
+        if now <= start:
+            return ()
+        dt = max(0.0, min(0.05, now - max(start, self.tick_time)))
+        self.tick_time = now
+        self.continuing = True
+        precision = any(self.held.get((s, False), False) for s in (0x2A, 0x36))
+        speed = self.settings.precision_hold_speed if precision else self.settings.hold_speed
+        x = self.direction[0] * speed * dt + self.remainder[0]
+        y = self.direction[1] * speed * dt + self.remainder[1]
+        dx, dy = math.trunc(x), math.trunc(y)
+        self.remainder = (x - dx, y - dy)
+        return (("move", dx, dy),) if dx or dy else ()
 
     def reset(self) -> tuple[tuple, ...]:
         actions = tuple(("button", button, False) for button in sorted(self.buttons))
         self.buttons.clear()
         self.active = False
-        self.anchor = None
+        self.clear_motion()
         return actions
 
     def handle(self, scan: int, extended: bool, down: bool, now: float) -> Result:
@@ -81,6 +118,11 @@ class Engine:
         mode = (self.settings.mode_scan, False)
         if not down:
             suppressed = self.held.pop(key, False)
+            if key == self.motion_key:
+                if self.continuing:
+                    self.clear_motion()
+                else:
+                    self.motion_key = None
             if key == mode:
                 return Result(suppressed, self.reset())
             if suppressed and key in {(0x39, False), (0x1C, False)}:
@@ -94,7 +136,7 @@ class Engine:
         if key == mode:
             # Avoid Ctrl/Alt/Win or previously typed keys affecting mouse actions.
             self.active = not self.held
-            self.anchor = None
+            self.clear_motion()
             self.held[key] = True
             return Result(True)
         self.held[key] = self.active
@@ -105,24 +147,43 @@ class Engine:
         if key in {(0x39, False), (0x1C, False)}:
             button = "left" if scan == 0x39 else "right"
             self.buttons.add(button)
-            self.anchor = None
+            self.clear_motion()
             return Result(True, (("button", button, True),))
         if key in {(0x48, True), (0x50, True)}:
-            self.anchor = None
+            self.clear_motion()
             return Result(True, (("scroll", 120 if scan == 0x48 else -120),))
         position = self.positions.get(key)
         if position is None:
+            if key not in {(0x2A, False), (0x36, False)}:
+                self.clear_motion()
             return Result(True)
         previous = self.anchor
         elapsed = now - self.last_time
         self.anchor = position
         self.last_time = now
+        self.motion_key = key
+        self.tick_time = now
+        self.continuing = False
+        self.remainder = (0.0, 0.0)
         if previous is None or elapsed < 0 or elapsed > self.settings.stroke_timeout:
+            self.direction = None
             return Result(True)
         dx, dy = position[0] - previous[0], position[1] - previous[1]
         # Distant keys are ambiguous (another finger / repositioning): re-anchor.
-        if math.hypot(dx, dy) > self.settings.max_step:
+        distance = math.hypot(dx, dy)
+        if distance > self.settings.max_step:
+            self.direction = None
             return Result(True)
+        # A long return against the preceding direction begins a new stroke.
+        # For J-K-L-J, L-J resets the anchor instead of undoing rightward motion.
+        if (self.direction is not None and distance >= self.settings.restart_distance
+                and dx * self.direction[0] + dy * self.direction[1] < 0):
+            self.direction = None
+            return Result(True)
+        if distance == 0:
+            self.direction = None
+            return Result(True)
+        self.direction = (dx / distance, dy / distance)
         precision = any(self.held.get((s, False), False) for s in (0x2A, 0x36))
         gain = self.settings.precision_gain if precision else self.settings.gain
         return Result(True, (("move", round(dx * gain), round(dy * gain)),))

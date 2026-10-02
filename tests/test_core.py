@@ -102,6 +102,86 @@ class GestureTests(unittest.TestCase):
         self.assertTrue(engine.active)
 
 
+class ContinuousMotionTests(unittest.TestCase):
+    def make(self):
+        e = Engine(Settings())
+        e.handle(0x3A, False, True, 0)
+        return e
+
+    def stroke(self, e, codes, start=0):
+        for i, code in enumerate(codes):
+            e.handle(code, False, True, start + i * 0.05)
+            e.handle(code, False, False, start + i * 0.05 + 0.01)
+
+    def test_repeated_jkl_never_moves_back(self):
+        e = self.make()
+        moves = []
+        for i, code in enumerate([0x24, 0x25, 0x26] * 4):
+            moves.extend(e.handle(code, False, True, i * 0.05).actions)
+            e.handle(code, False, False, i * 0.05 + 0.01)
+        self.assertEqual(moves, [("move", 32, 0)] * 8)
+
+    def test_adjacent_reverse_is_still_possible(self):
+        e = self.make()
+        self.stroke(e, [0x24, 0x25, 0x26])
+        self.assertEqual(e.handle(0x25, False, True, 0.15).actions, (("move", -32, 0),))
+
+    def test_hold_and_release(self):
+        e = self.make()
+        self.stroke(e, [0x24, 0x25])
+        e.handle(0x26, False, True, 0.1)
+        self.assertEqual(e.tick(0.34), ())
+        self.assertEqual(e.tick(0.40), (("move", 16, 0),))
+        e.handle(0x26, False, False, 0.41)
+        self.assertEqual(e.tick(0.5), ())
+        self.assertEqual(e.handle(0x24, False, True, 0.51).actions, ())
+
+    def test_first_key_alone_cannot_continue(self):
+        e = self.make()
+        e.handle(0x24, False, True, 0)
+        self.assertEqual(e.tick(1), ())
+
+    def test_release_mode_and_escape_stop_continuation(self):
+        for scan in (0x3A, 0x01):
+            e = self.make()
+            e.handle(0x24, False, True, 0)
+            e.handle(0x25, False, True, 0.05)
+            self.assertTrue(e.tick(0.4))
+            e.handle(scan, False, scan == 0x01, 0.41)
+            self.assertEqual(e.tick(0.5), ())
+
+    def test_precision_speed_and_no_catchup_jump(self):
+        e = self.make()
+        e.handle(0x24, False, True, 0)
+        e.handle(0x25, False, True, 0.05)
+        e.handle(0x2A, False, True, 0.1)
+        self.assertEqual(e.tick(10), (("move", 2, 0),))
+
+    def test_diagonal_is_normalized(self):
+        e = self.make()
+        e.handle(0x21, False, True, 0)
+        e.handle(0x13, False, True, 0.05)
+        actions = e.tick(0.35)
+        self.assertLess(actions[0][1], 0)
+        self.assertLess(actions[0][2], 0)
+        self.assertLessEqual(abs(actions[0][2]), 16)
+
+    def test_autorepeat_does_not_postpone_hold(self):
+        e = self.make()
+        e.handle(0x24, False, True, 0)
+        e.handle(0x25, False, True, 0.05)
+        e.handle(0x25, False, True, 0.29)
+        self.assertTrue(e.tick(0.35))
+
+    def test_leftward_repeated_strokes(self):
+        e = self.make()
+        moves = []
+        for i, code in enumerate([0x26, 0x25, 0x24] * 3):
+            moves.extend(e.handle(code, False, True, i * 0.05).actions)
+            e.handle(code, False, False, i * 0.05 + 0.01)
+        self.assertEqual(moves, [("move", -32, 0)] * 6)
+
+
 class ConfigurationTests(unittest.TestCase):
     def test_default_config(self):
         self.assertEqual(load_settings(Path(__file__).parents[1] / "config.json"), Settings())

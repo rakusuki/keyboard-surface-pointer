@@ -145,6 +145,7 @@ def run(settings: Settings, dry_run: bool, check_backend: bool = False) -> None:
     if not hook:
         raise ctypes.WinError(ctypes.get_last_error())
     print("Hold Caps Lock (or configured F8) to point. Space: left/drag; Enter: right.")
+    print("Repeat J-K-L strokes to move right; hold the final key to keep moving.")
     print("Shift: precision; arrows up/down: scroll; Esc: cancel mode; Ctrl+C: quit.")
     if dry_run:
         print("DRY RUN: mouse output disabled; mode keys are still suppressed.")
@@ -156,6 +157,7 @@ def run(settings: Settings, dry_run: bool, check_backend: bool = False) -> None:
                     return
                 user32.TranslateMessage(ctypes.byref(message))
                 user32.DispatchMessageW(ctypes.byref(message))
+            emit(engine.tick(time.monotonic()))
             if pending:
                 actions, pending[:] = tuple(pending), []
                 for action in actions:
