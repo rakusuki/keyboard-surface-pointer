@@ -63,7 +63,7 @@ def run(settings, dry_run=False, check_backend=False, device_path=None, list_dev
                             pressed_buttons.discard(button)
                     output.syn()
 
-            print(f"Keyboard: {device.name}. Hold Caps Lock/F8 to point; release to type.")
+            print(f"Keyboard: {device.name}. Hold a configured mode key (default Caps Lock / right Alt) to point; release to type.")
             print("Ctrl+C: stop. Ctrl+Alt+Esc: emergency stop on the selected keyboard.")
             if dry_run:
                 print("DRY RUN: pointing keys suppressed; mouse events printed only.")

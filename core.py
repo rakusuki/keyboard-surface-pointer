@@ -29,6 +29,8 @@ def key_positions(layout: str) -> dict[tuple[int, bool], tuple[float, float]]:
 class Settings:
     layout: str = "jis"
     mode_scan: int = 0x3A  # Caps Lock
+    mode_extended: bool = False
+    extra_mode_keys: tuple = ()
     gain: float = 32.0
     precision_gain: float = 4.0
     stroke_timeout: float = 0.45
@@ -42,9 +44,22 @@ class Settings:
         key_positions(self.layout)
         if isinstance(self.mode_scan, bool) or not isinstance(self.mode_scan, int):
             raise ValueError("mode_scan must be an integer")
-        # Keep controls and movement keys distinct; F8 is an alternative.
-        if self.mode_scan not in {0x3A, 0x42}:
-            raise ValueError("mode_scan must be 58 (Caps Lock) or 66 (F8)")
+        if not isinstance(self.mode_extended, bool):
+            raise ValueError("mode_extended must be boolean")
+        allowed = {(0x3A, False), (0x42, False), (0x38, False),
+                   (0x38, True), (0x5C, True)}
+        if not isinstance(self.extra_mode_keys, (list, tuple)):
+            raise ValueError("extra_mode_keys must be a list of [scan, extended] pairs")
+        keys = [(self.mode_scan, self.mode_extended)]
+        for key in self.extra_mode_keys:
+            if (not isinstance(key, (list, tuple)) or len(key) != 2
+                    or isinstance(key[0], bool) or not isinstance(key[0], int)
+                    or not isinstance(key[1], bool)):
+                raise ValueError("each mode key must be [integer scan, boolean extended]")
+            keys.append(tuple(key))
+        if any(key not in allowed for key in keys) or len(set(keys)) != len(keys):
+            raise ValueError("mode keys must be distinct Caps Lock, F8, left/right Alt/Option or right Command")
+        object.__setattr__(self, "extra_mode_keys", tuple(keys[1:]))
         for name in ("gain", "precision_gain", "stroke_timeout", "max_step",
                      "restart_distance", "hold_delay", "hold_speed", "precision_hold_speed"):
             value = getattr(self, name)
@@ -56,6 +71,10 @@ class Settings:
             raise ValueError("precision_hold_speed must not exceed hold_speed")
         if self.precision_gain > self.gain:
             raise ValueError("precision_gain must not exceed gain")
+
+    @property
+    def mode_keys(self) -> frozenset:
+        return frozenset(((self.mode_scan, self.mode_extended), *self.extra_mode_keys))
 
 
 @dataclass(frozen=True)
@@ -115,7 +134,7 @@ class Engine:
 
     def handle(self, scan: int, extended: bool, down: bool, now: float) -> Result:
         key = (scan, extended)
-        mode = (self.settings.mode_scan, False)
+        modes = self.settings.mode_keys
         if not down:
             suppressed = self.held.pop(key, False)
             if key == self.motion_key:
@@ -123,8 +142,10 @@ class Engine:
                     self.clear_motion()
                 else:
                     self.motion_key = None
-            if key == mode:
-                return Result(suppressed, self.reset())
+            if key in modes:
+                if not any(k in self.held for k in modes):
+                    return Result(suppressed, self.reset())
+                return Result(suppressed)
             if suppressed and key in {(0x39, False), (0x1C, False)}:
                 button = "left" if scan == 0x39 else "right"
                 if button in self.buttons:
@@ -133,10 +154,11 @@ class Engine:
             return Result(suppressed)
         if key in self.held:  # OS auto-repeat is not finger motion
             return Result(self.held[key])
-        if key == mode:
+        if key in modes:
             # Avoid Ctrl/Alt/Win or previously typed keys affecting mouse actions.
-            self.active = not self.held
-            self.clear_motion()
+            if not any(k in self.held for k in modes):
+                self.active = not self.held
+                self.clear_motion()
             self.held[key] = True
             return Result(True)
         self.held[key] = self.active

@@ -43,3 +43,19 @@ def mac_key(code: int) -> tuple[int, bool]:
     if code in MAC_EXTENDED:
         return MAC_EXTENDED[code], True
     return MAC_CODES.get(code, 0x2000 + code), False
+
+
+def mac_visible_flags(flags: int, modes, visible_keys) -> int:
+    """Remove reserved modifier flags, preserving a forwarded opposite side."""
+    families = (
+        (0x80000, ((0x38, False), (0x38, True)), (0x20, 0x40)),
+        (0x100000, ((0x5B, True), (0x5C, True)), (0x08, 0x10)),
+    )
+    for aggregate, keys, device_flags in families:
+        if any(key in modes for key in keys):
+            for key, flag in zip(keys, device_flags):
+                if key in modes:
+                    flags &= ~flag
+            if not any(key in visible_keys for key in keys):
+                flags &= ~aggregate
+    return flags

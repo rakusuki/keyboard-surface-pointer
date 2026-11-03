@@ -1,4 +1,4 @@
-"""macOS Quartz event-tap backend. F8 is the supported hold-mode key."""
+"""macOS Quartz event-tap backend. Configurable left/right hold-mode keys."""
 import time
 
 from core import Engine
@@ -13,8 +13,8 @@ def run(settings, dry_run=False, check_backend=False):
         kCFRunLoopCommonModes, kCFRunLoopDefaultMode,
     )
 
-    if settings.mode_scan != 0x42:
-        raise ValueError("macOS hold mode requires F8: set mode_scan to 66 (default config.macos.json)")
+    if (0x3A, False) in settings.mode_keys:
+        raise ValueError("macOS Caps Lock is a toggle; use Option, right Command or F8")
     if check_backend:
         print("Quartz/CoreFoundation imported. No event tap created or mouse events sent.")
         print(f"Input Monitoring granted: {bool(q.CGPreflightListenEventAccess())}")
@@ -63,6 +63,7 @@ def run(settings, dry_run=False, check_backend=False):
             else:
                 event = q.CGEventCreateScrollWheelEvent(None, q.kCGScrollEventUnitLine,
                                                        1, action[1] // 120)
+            q.CGEventSetFlags(event, 0)  # mode modifiers must not become Cmd/Option-clicks
             q.CGEventPost(q.kCGHIDEventTap, event)
 
     def callback(proxy, kind, event, context):
@@ -75,7 +76,7 @@ def run(settings, dry_run=False, check_backend=False):
             code = q.CGEventGetIntegerValueField(event, q.kCGKeyboardEventKeycode)
             if kind == q.kCGEventFlagsChanged:
                 # Caps Lock is toggle state, not reliable physical down/up. Pass it
-                # and Fn through; use F8 for hold mode on macOS.
+                # and Fn through; use configured physical modifier keys instead.
                 if code not in MAC_MODIFIERS:
                     return event
                 down = bool(q.CGEventSourceKeyState(q.kCGEventSourceStateHIDSystemState, code))
@@ -84,7 +85,15 @@ def run(settings, dry_run=False, check_backend=False):
             scan, extended = mac_key(code)
             result = engine.handle(scan, extended, down, time.monotonic())
             emit(result.actions)
-            return None if result.suppress else event
+            if result.suppress:
+                return None
+            # Physical mode modifiers may still appear in later event flags even
+            # though their down event was consumed. Preserve the opposite side.
+            from keycodes import mac_visible_flags
+            visible = {k for k, consumed in engine.held.items() if not consumed}
+            flags = mac_visible_flags(q.CGEventGetFlags(event), settings.mode_keys, visible)
+            q.CGEventSetFlags(event, flags)
+            return event
         except Exception as exc:
             failed.append(exc)
             return None if result is not None and result.suppress else event
@@ -99,8 +108,8 @@ def run(settings, dry_run=False, check_backend=False):
     loop = CFRunLoopGetCurrent()
     CFRunLoopAddSource(loop, source, kCFRunLoopCommonModes)
     q.CGEventTapEnable(tap, True)
-    print("Hold F8 (or Fn+F8) to point. Space: left/drag; Return: right; Shift: precision.")
-    print("Release F8 to type normally. Ctrl+C in the terminal: stop.")
+    print(f"Hold a configured mode key {sorted(settings.mode_keys)} to point.")
+    print("Default: left Option / right Command. Release all mode keys to type. Ctrl+C: stop.")
     if dry_run:
         print("DRY RUN: pointing keys suppressed; mouse output printed only.")
     try:

@@ -255,7 +255,8 @@ class TwoKeyAndShortcutTests(unittest.TestCase):
 
 class ConfigurationTests(unittest.TestCase):
     def test_default_config(self):
-        self.assertEqual(load_settings(Path(__file__).parents[1] / "config.json"), Settings())
+        self.assertEqual(load_settings(Path(__file__).parents[1] / "config.json"),
+                         Settings(extra_mode_keys=((56, True),)))
 
     def test_layouts(self):
         self.assertIn((0x73, False), key_positions("jis"))

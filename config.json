@@ -8,5 +8,12 @@
   "restart_distance": 1.0,
   "hold_delay": 0.25,
   "hold_speed": 320.0,
-  "precision_hold_speed": 40.0
+  "precision_hold_speed": 40.0,
+  "mode_extended": false,
+  "extra_mode_keys": [
+    [
+      56,
+      true
+    ]
+  ]
 }

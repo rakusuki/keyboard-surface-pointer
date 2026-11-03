@@ -144,7 +144,7 @@ def run(settings: Settings, dry_run: bool, check_backend: bool = False) -> None:
     hook = user32.SetWindowsHookExW(13, callback, kernel32.GetModuleHandleW(None), 0)
     if not hook:
         raise ctypes.WinError(ctypes.get_last_error())
-    print("Hold Caps Lock (or configured F8) to point. Space: left/drag; Enter: right.")
+    print("Hold a configured mode key (default Caps Lock / right Alt) to point. Space: left/drag; Enter: right.")
     print("Repeat J-K-L strokes to move right; hold the final key to keep moving.")
     print("Shift: precision; arrows up/down: scroll; Esc: cancel mode; Ctrl+C: quit.")
     if dry_run:

@@ -4,7 +4,7 @@
 
 ## 日本語
 
-既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows・Ubuntu・macOS向け試作版 **v0.3.0** です。追加機器は不要です。Windows版はPython標準ライブラリのみ、Ubuntu/macOS版はOS別の依存ライブラリを使用します。
+既存のキーボードで、順番に押されたキーの物理的な位置からマウスポインターを動かす、Windows・Ubuntu・macOS向け試作版 **v0.4.0** です。追加機器は不要です。Windows版はPython標準ライブラリのみ、Ubuntu/macOS版はOS別の依存ライブラリを使用します。
 
 通常のキーボードには接触位置センサーがないため、**触れるだけでは動きません。キーが入力される深さまで押す必要があります。** トラックパッドと同じ精度・操作感を保証するものではなく、押しながらなぞる操作の実用性を検証する段階です。
 
@@ -52,7 +52,7 @@ py -3 pointer.py
 | スペースを押したまま移動 | ドラッグ |
 | Enterを押して離す | 右クリック |
 | 上 / 下矢印を押す | 上 / 下へスクロール。長押しリピートは無効 |
-| Caps Lockを離す | モード終了、押下中のマウスボタンも解放 |
+| すべてのモードキーを離す | モード終了、押下中のマウスボタンも解放 |
 | モード中にEsc | モードをキャンセル。再開にはモードキーを離して押し直す |
 
 Caps Lock（または設定したモードキー）を離した後、新たに押すキーは通常のキーボード入力として通します。`Alt+Tab`、`Ctrl+C`、`Win+D`などを使えます。モード中に抑制したキーの遅れた解放だけは対応する押下と対にして抑制し、キー状態が残らないようにします。
@@ -78,7 +78,7 @@ py -3 pointer.py --config config.local.json
 | 設定 | 標準値 | 意味 |
 |---|---|---|
 | `layout` | `"jis"` | `"jis"` または `"us"`。物理座標を切り替え |
-| `mode_scan` | `58` | Caps Lock。`66` にするとF8。ほかの値は受け付けません |
+| `mode_scan` | `58` | 主モードキー。58=Caps Lock、66=F8、56=Alt/Option、92=右Command（extended=true） |
 | `gain` | `32.0` | キー間隔1単位あたりの相対移動指示量 |
 | `precision_gain` | `4.0` | Shift中の移動指示量 |
 | `stroke_timeout` | `0.45` | この秒数以上の間隔が空くと次のキーは基準点になります |
@@ -161,7 +161,7 @@ GitHub ActionsではWindows / Ubuntu / macOS、Python 3.10 / 3.13でテストし
 
 ### Overview
 
-**v0.3.0** is a Windows, Ubuntu, and macOS prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware is required. Windows uses the Python standard library; Ubuntu and macOS require platform-specific dependencies.
+**v0.4.0** is a Windows, Ubuntu, and macOS prototype that moves the mouse pointer using the physical positions of keys pressed in sequence on an ordinary keyboard. No additional hardware is required. Windows uses the Python standard library; Ubuntu and macOS require platform-specific dependencies.
 
 **Touch alone cannot be detected: each key must be pressed far enough to register.** This prototype evaluates the practicality of moving across keycaps while pressing them; it does not promise trackpad-level precision or comfort.
 
@@ -209,7 +209,7 @@ To stop, release the mode key, focus the console, and press `Ctrl+C`.
 | Hold Space while moving | Drag |
 | Press and release Enter | Right click |
 | Press Up / Down arrow | Scroll up / down; auto-repeat is ignored |
-| Release Caps Lock | Exit pointing mode and release mouse buttons held by the application |
+| Release all mode keys | Exit pointing mode and release mouse buttons held by the application |
 | Press Esc in pointing mode | Cancel the mode; release and press the mode key again to reactivate |
 
 After releasing Caps Lock (or the configured mode key), newly pressed keys pass through as normal keyboard input, including `Alt+Tab`, `Ctrl+C`, and `Win+D`. Late releases of keys consumed during pointing remain paired with their consumed presses.
@@ -235,7 +235,7 @@ py -3 pointer.py --config config.local.json
 | Setting | Default | Meaning |
 |---|---|---|
 | `layout` | `"jis"` | Physical layout: `"jis"` or `"us"` |
-| `mode_scan` | `58` | Caps Lock; use `66` for F8. Other values are rejected |
+| `mode_scan` | `58` | Primary mode: 58=Caps Lock, 66=F8, 56=Alt/Option, 92=right Command (extended=true) |
 | `gain` | `32.0` | Relative movement units per standard key pitch |
 | `precision_gain` | `4.0` | Movement units while Shift is held |
 | `stroke_timeout` | `0.45` | A gap longer than this many seconds makes the next key a new anchor |
@@ -350,11 +350,38 @@ sudo .venv/bin/python pointer.py --device /dev/input/eventN
 - 仮想入力デバイスのCaps Lock LED同期、複数キーボードの一体処理は未実装です。別のキーボードで押す修飾キーは追跡しません。他キーボードの修飾キーも離して試してください。
 - Caps Lock LED synchronization and combined handling of multiple keyboards are not implemented. Modifiers held on other keyboards are not tracked; release them during testing.
 
+## v0.4.0：左右の手で操作 / Point with either hand
+
+| OS | 右手で移動 / Right-hand pointing | 左手で移動 / Left-hand pointing |
+|---|---|---|
+| Windows / Ubuntu | Caps Lock保持 / Hold Caps Lock | 右Alt保持 / Hold right Alt |
+| macOS（JIS / US） | 左Option保持 / Hold left Option | 右Command保持 / Hold right Command |
+
+モードキーはトグルではなく保持式です。いずれかを保持している間は操作を継続し、すべて離すと停止します。Escで解除した場合は、すべてのモードキーを離してから押し直してください。文字キーを含め、ほかのキーを先に押している場合は誤操作防止のため開始しません。
+
+Mode keys are hold-to-use, not toggles. Either key keeps the mode active; releasing all stops movement and releases mouse buttons. After Escape, release all mode keys before starting again. Pre-held non-mode keys prevent activation.
+
+主キーは `mode_scan` と `mode_extended`、追加キーは `extra_mode_keys` の `[scan, extended]` 配列で指定します。既存のカスタム設定はそのまま読み込めますが、追加キーは自動追加されません。
+
+Set the primary key with `mode_scan` and `mode_extended`, and additional keys with `extra_mode_keys`, a list of `[scan, extended]` pairs. Legacy custom configs still load; additional keys are not inserted automatically.
+
+```json
+{"mode_scan": 56, "mode_extended": false, "extra_mode_keys": [[92, true]]}
+```
+
+上記はMacの左Option＋右Commandです。Windows/Ubuntuは `mode_scan: 58`、`mode_extended: false`、`extra_mode_keys: [[56, true]]` が標準です。追加キーを無効にするには `extra_mode_keys: []` にします。AltGr配列では右AltがCtrl併用として通知される場合があるため、右Altを無効化しF8 `[66, false]` などに変更してください。予約したキー本来のショートカットは起動中使えません。通常のAlt+Tabは左Altを使います。
+
+The example reserves Mac left Option and right Command. Windows/Ubuntu ship with primary scan 58, extended false, and extra keys `[[56, true]]`. Use `extra_mode_keys: []` to disable extra keys. On AltGr layouts, right Alt may generate a companion Ctrl event; disable it and choose F8 `[66, false]` instead. Reserved keys lose their normal shortcuts while running. Use left Alt for normal Alt+Tab.
+
+共通処理・キー変換・修飾フラグの自動テストは45件成功しました。今回の追加機能は各OSの実機では未検証です。
+
+45 automated tests pass for shared logic, key mappings and modifier flags. This update has not been verified on physical desktops.
+
 ## macOS版の導入 / macOS setup
 
-macOSではCaps Lockのトグル状態を物理的な押下・解放として扱わず、標準のモードキーを **F8** にします。`config.macos.json` はmacOSで自動選択されます。カスタム設定を渡す場合も `mode_scan` を `66` にしてください。
+macOSの標準モードキーは **左Optionと右Command** です。左Optionを保持して右手で操作、右Commandを保持して左手で操作できます。F8も右Optionも不要です。`config.macos.json` はmacOSで自動選択されます。Caps Lockの物理的な押下・解放には対応しません。
 
-On macOS, Caps Lock's toggle state is not used as physical down/up input. The default mode key is **F8**, with `config.macos.json` selected automatically. Custom configurations must also set `mode_scan` to `66`.
+macOS defaults to **left Option and right Command**: hold left Option for right-hand pointing, or right Command for left-hand pointing. Neither F8 nor right Option is required. `config.macos.json` is selected automatically. Caps Lock is not supported as a physical hold key.
 
 ```bash
 git pull --ff-only
@@ -372,12 +399,12 @@ Grant **Input Monitoring** and **Accessibility** in System Settings → Privacy 
 .venv/bin/python pointer.py
 ```
 
-- **F8を保持して `J → K → J → K`** で右へ移動。最後のKを保持すると連続移動。F8を離すと停止して通常入力へ戻ります。
-- **Hold F8 and press `J → K → J → K`** to move right. Hold the final K for continuous motion. Release F8 to stop and return to typing.
-- F8がメディアキーとして働く場合は **Fn+F8**、またはmacOSの「F1、F2などのキーを標準のファンクションキーとして使用」を有効にしてください。モード中のFnは通常機能へ通します。
-- If F8 acts as a media key, use **Fn+F8** or enable standard function keys in macOS settings. Fn remains passed through.
-- F8解放後はCommand+Tabなどを通常入力として通します。Shiftで精密操作、Spaceで左クリック/ドラッグ、Returnで右クリック、上下矢印でスクロールします。
-- Command+Tab passes through outside pointing mode. Shift gives precision control, Space clicks/drags, Return right-clicks, and Up/Down scrolls.
+- 左Option保持中に `J → K → J → K`、または右Command保持中に `A → S → A → S` で右へ移動します。逆順なら左へ移動します。最後のキーを保持すると連続移動します。
+- Hold left Option and repeat `J → K`, or hold right Command and repeat `A → S`, to move right. Reverse the order for leftward motion; hold the final key for continuous motion.
+- すべてのモードキーを離すと通常入力へ戻ります。Shiftは精密操作、Spaceは左クリック/ドラッグ、Returnは右クリック、上下矢印はスクロールです。
+- Release all mode keys to return to typing. Shift: precision; Space: left click/drag; Return: right click; Up/Down: scroll.
+- 起動中は左Optionと右Commandがモード専用です。通常のCommand+Tab/Command+Cなどには **左Command** を使用してください。Option入力が必要なら設定変更またはアプリ停止を行ってください。
+- While running, left Option and right Command are reserved. Use **left Command** for normal Command+Tab/Command+C shortcuts. Reconfigure or stop the application to restore reserved Option input.
 - Secure Input、ログイン画面、権限がないアプリでは入力取得・操作できない場合があります。入力タップが無効化された場合は終了して再起動します。
 - Secure Input, sign-in screens, and missing permissions can prevent capture or control. Restart if macOS disables the event tap.
 

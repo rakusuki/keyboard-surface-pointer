@@ -1,6 +1,6 @@
 {
   "layout": "jis",
-  "mode_scan": 66,
+  "mode_scan": 56,
   "gain": 32.0,
   "precision_gain": 4.0,
   "stroke_timeout": 0.45,
@@ -8,5 +8,12 @@
   "restart_distance": 1.0,
   "hold_delay": 0.25,
   "hold_speed": 320.0,
-  "precision_hold_speed": 40.0
+  "precision_hold_speed": 40.0,
+  "mode_extended": false,
+  "extra_mode_keys": [
+    [
+      92,
+      true
+    ]
+  ]
 }
