@@ -2,7 +2,7 @@
 import time
 
 from core import Engine
-from keycodes import MAC_CODES, MAC_EXTENDED, MAC_MODIFIERS, mac_key
+from keycodes import MAC_CODES, MAC_EXTENDED, MAC_MODIFIERS, mac_key, mac_modifier_down
 
 
 def run(settings, dry_run=False, check_backend=False):
@@ -79,7 +79,7 @@ def run(settings, dry_run=False, check_backend=False):
                 # and Fn through; use configured physical modifier keys instead.
                 if code not in MAC_MODIFIERS:
                     return event
-                down = bool(q.CGEventSourceKeyState(q.kCGEventSourceStateHIDSystemState, code))
+                down = mac_modifier_down(code, q.CGEventGetFlags(event))
             else:
                 down = kind == q.kCGEventKeyDown
             scan, extended = mac_key(code)
@@ -128,3 +128,4 @@ def run(settings, dry_run=False, check_backend=False):
         releases = {a[1] for a in engine.reset()} | buttons
         for button in sorted(releases):
             emit((("button", button, False),))
+

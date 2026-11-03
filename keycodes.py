@@ -54,8 +54,20 @@ def mac_visible_flags(flags: int, modes, visible_keys) -> int:
     for aggregate, keys, device_flags in families:
         if any(key in modes for key in keys):
             for key, flag in zip(keys, device_flags):
-                if key in modes:
+                if key in modes and key not in visible_keys:
                     flags &= ~flag
             if not any(key in visible_keys for key in keys):
                 flags &= ~aggregate
     return flags
+
+
+
+def mac_modifier_down(code: int, flags: int) -> bool:
+    """Read the event's side-specific state, not a later HID snapshot.
+
+    Aggregate Command/Option flags cannot distinguish opposite-side releases.
+    Quartz flagsChanged events carry the device-dependent side bits too.
+    """
+    side_flags = {54: 0x10, 55: 0x08, 56: 0x02, 60: 0x04,
+                  58: 0x20, 61: 0x40, 59: 0x01, 62: 0x2000}
+    return bool(flags & side_flags[code])

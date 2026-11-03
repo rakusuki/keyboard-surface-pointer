@@ -418,3 +418,12 @@ Automated tests cover the shared engine and key mappings. CI is configured to ch
 - [python-evdev tutorial](https://python-evdev.readthedocs.io/en/stable/tutorial.html)
 - [PyObjC Quartz notes](https://pyobjc.readthedocs.io/en/latest/apinotes/Quartz.html)
 - [Apple Quartz Event Services](https://developer.apple.com/documentation/coregraphics/quartz-event-services)
+
+
+## macOS JIS回帰検証 / Regression verification
+
+macOSのイベント時点の左右別修飾フラグ判定と、起動前から押されていた予約キーのフラグ保持を修正しました。Linux / Python 3.12で51件（模擬Quartzバックエンド6件を含む）の自動テストが成功しました。実機操作は未実施です。
+
+[Mac JISの具体的な実機検証手順・検証範囲](docs/MACOS-JIS-VERIFICATION.md)を参照してください。起動中の右Commandはモード専用のままで、通常ショートカットは左Commandを使用します。
+
+51 automated tests pass on Linux / Python 3.12, including six mocked Quartz adapter tests. Physical Mac/JIS operation remains unverified. See the linked checklist. Right Command remains reserved while running; use left Command for normal shortcuts.
